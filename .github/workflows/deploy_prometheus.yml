@@ -13,10 +13,26 @@ on:
           - production-infra
 
 jobs:
-  deploy-on-the-dev_infra-droplet:
-    if: github.event.inputs.host == 'dev_infra-droplet'
+  deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Set deployment variables
+        id: vars
+        run: |
+          if [[ "${{ github.event.inputs.host }}" == "dev_infra-droplet" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST }}" >> $GITHUB_ENV
+            echo "VPS_PORT=${{ secrets.VPS_SSH_PORT }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY }}" >> $GITHUB_ENV
+            echo "PROMETHEUS_CONFIG=prometheus.yml" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.host }}" == "production-infra" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST_PROD_INFRA }}" >> $GITHUB_ENV
+            echo "VPS_PORT=${{ secrets.VPS_SSH_PORT_PROD }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME_PROD_INFRA }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY_PROD_INFRA }}" >> $GITHUB_ENV
+            echo "PROMETHEUS_CONFIG=prometheus.production-infra.yml" >> $GITHUB_ENV
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -25,85 +41,51 @@ jobs:
       - name: Copy Prometheus configuration
         uses: appleboy/scp-action@v0.1.3
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "./prometheus.yml, ./first_rules.yml"
-          target: "/home/${{ secrets.VPS_USERNAME }}/prometheus/"
+          host: ${{ env.VPS_HOST }}
+          port: ${{ env.VPS_PORT }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ env.VPS_SSH_KEY }}
+          source: "./${{ env.PROMETHEUS_CONFIG }}"
+          target: "/home/${{ env.VPS_USERNAME }}/prometheus/"
 
       - name: Remove old container and deploy Prometheus container
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          host: ${{ env.VPS_HOST }}
+          port: ${{ env.VPS_PORT }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ env.VPS_SSH_KEY }}
           script: |
             docker stop prometheus || true
             docker rm prometheus || true
             docker pull prom/prometheus
             docker run -d --restart=unless-stopped -v /var/lib/prometheus:/prometheus \
-              -v /home/${{ secrets.VPS_USERNAME }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml \
-              -v /home/github-actions/prometheus/first_rules.yml:/etc/prometheus/first_rules.yml \
-              --name prometheus --net ngdem -p 9090:9090 prom/prometheus
-
-  deploy-on-the-production-infra:
-    if: github.event.inputs.host == 'production-infra'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Copy Prometheus configuration
-        uses: appleboy/scp-action@v0.1.3
-        with:
-          host: ${{ secrets.VPS_HOST_PROD_INFRA }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ secrets.VPS_USERNAME_PROD_INFRA }}
-          key: ${{ secrets.VPS_SSH_KEY_PROD_INFRA }}
-          source: "./prometheus.production-infra.yml"
-          target: "/home/${{ secrets.VPS_USERNAME_PROD_INFRA }}/prometheus/"
-
-      - name: Remove old container and deploy Prometheus container
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST_PROD_INFRA }}
-          username: ${{ secrets.VPS_USERNAME_PROD_INFRA }}
-          key: ${{ secrets.VPS_SSH_KEY_PROD_INFRA }}
-          script: |
-            docker stop prometheus || true
-            docker rm prometheus || true
-            docker pull prom/prometheus
-            docker run -d --restart=unless-stopped -v /var/lib/prometheus:/prometheus \
-              -v /home/${{ secrets.VPS_USERNAME_PROD_INFRA }}/prometheus/prometheus.production-infra.yml:/etc/prometheus/prometheus.yml \
+              -v /home/${{ env.VPS_USERNAME }}/prometheus/${{ env.PROMETHEUS_CONFIG }}:/etc/prometheus/prometheus.yml \
               --name prometheus --net ngdem -p 9090:9090 prom/prometheus
 
   healthcheck:
-    needs: [deploy-on-the-dev_infra-droplet, deploy-on-the-production-infra]
-    if: github.event.inputs.host == 'dev_infra-droplet' || github.event.inputs.host == 'production-infra'
+    needs: deploy
     runs-on: ubuntu-latest
     steps:
       - name: Run Healthcheck
-        uses: appleboy/ssh-action@master   
+        uses: appleboy/ssh-action@master
         with:
-          host: ${{ github.event.inputs.host == 'dev_infra-droplet' && secrets.VPS_HOST || secrets.VPS_HOST_PROD_INFRA }}
-          port: ${{ github.event.inputs.host == 'dev_infra-droplet' && secrets.VPS_SSH_PORT || secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ github.event.inputs.host == 'dev_infra-droplet' && secrets.VPS_USERNAME || secrets.VPS_USERNAME_PROD_INFRA }}
-          key: ${{ github.event.inputs.host == 'dev_infra-droplet' && secrets.VPS_SSH_KEY || secrets.VPS_SSH_KEY_PROD_INFRA }}  
+          host: ${{ env.VPS_HOST }}
+          port: ${{ env.VPS_PORT }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ env.VPS_SSH_KEY }}
           script: |
-            retries=3
-            delay_seconds=20
+            retries=5
+            delay_seconds=10
 
             for attempt in $(seq "$retries"); do
-            http_status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9090/-/healthy)
+              http_status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9090/-/healthy)
               
               if [ "$http_status" -eq 200 ]; then
-                echo "The service has been successfully raised"
-                echo "status=success" >> "$GITHUB_ENV"
+                echo "Prometheus is running and healthy"
                 exit 0
               else
-                echo "Error: Service not available (attempt $attempt/$retries)"
+                echo "Healthcheck failed (attempt $attempt/$retries), HTTP status: $http_status"
               fi
 
               if [ "$attempt" -lt "$retries" ]; then
@@ -111,6 +93,5 @@ jobs:
               fi
             done
 
-            echo "Failed to start new container."
-            echo "status=failure" >> "$GITHUB_ENV"
+            echo "Prometheus failed healthcheck after $retries attempts."
             exit 1
