@@ -1,23 +1,45 @@
 name: Deploy Promtail Production
 
 on:
-    workflow_dispatch:
-      inputs:
-        host:
-          description: 'Host to deploy'
-          required: true
-          default: 'production-infra'
-          type: choice
-          options:
-            - production-frontend
-            - production-backend
-            - production-infra
+  workflow_dispatch:
+    inputs:
+      host:
+        description: 'Host to deploy'
+        required: true
+        default: 'production-infra'
+        type: choice
+        options:
+          - production-frontend
+          - production-backend
+          - production-infra
 
 jobs:
-  deploy-on-the-production-frontend:
-    if: github.event.inputs.host == 'production-frontend'
+  deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Set deployment variables
+        id: vars
+        run: |
+          if [[ "${{ github.event.inputs.host }}" == "production-frontend" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST_PROD_FRONT }}" >> $GITHUB_ENV
+            echo "VPS_PORT=${{ secrets.VPS_SSH_PORT_PROD }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME_PROD_FRONT }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY_PROD_FRONT }}" >> $GITHUB_ENV
+            echo "PROMTAIL_CONFIG=promtail-config.production-frontend.yml" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.host }}" == "production-backend" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST_PROD_BACK }}" >> $GITHUB_ENV
+            echo "VPS_PORT=${{ secrets.VPS_SSH_PORT_PROD }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME_PROD_BACK }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY_PROD_BACK }}" >> $GITHUB_ENV
+            echo "PROMTAIL_CONFIG=promtail-config.production-backend.yml" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.host }}" == "production-infra" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST_PROD_INFRA }}" >> $GITHUB_ENV
+            echo "VPS_PORT=${{ secrets.VPS_SSH_PORT_PROD }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME_PROD_INFRA }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY_INFRA }}" >> $GITHUB_ENV
+            echo "PROMTAIL_CONFIG=promtail-config.production-infra.yml" >> $GITHUB_ENV
+          fi
+
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
@@ -26,116 +48,20 @@ jobs:
       - name: Copy promtail configuration
         uses: appleboy/scp-action@v0.1.3
         with:
-          host: ${{ secrets.VPS_HOST_PROD_FRONT }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ secrets.VPS_USERNAME_PROD_FRONT }}
-          key: ${{ secrets.VPS_SSH_KEY_PROD_FRONT }}
-          source: "./promtail-config.production-frontend.yml"
-          target: "/home/${{ secrets.VPS_USERNAME_PROD_FRONT }}/promtail/"
+          host: ${{ env.VPS_HOST }}
+          port: ${{ env.VPS_PORT }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ env.VPS_SSH_KEY }}
+          source: "./${{ env.PROMTAIL_CONFIG }}"
+          target: "/home/${{ env.VPS_USERNAME }}/promtail/"
 
       - name: Deploy and verify promtail
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.VPS_HOST_PROD_FRONT }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ secrets.VPS_USERNAME_PROD_FRONT }}
-          key: ${{ secrets.VPS_SSH_KEY_PROD_FRONT }}
+          host: ${{ env.VPS_HOST }}
+          port: ${{ env.VPS_PORT }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ env.VPS_SSH_KEY }}
           script: |
             docker stop promtail || true
-            docker rm promtail || true
-            docker pull grafana/promtail:latest
-            docker run -d --restart=unless-stopped --name promtail --network ngdem --volume /home/${{ secrets.VPS_USERNAME_PROD_FRONT }}/promtail/promtail-config.production-frontend.yml:/etc/promtail/config.yml \
-                --volume /var/run/docker.sock:/var/run/docker.sock grafana/promtail:latest \
-                -config.file=/etc/promtail/config.yml
-
-            sleep 10
-            if docker ps --filter "name=promtail" --filter "status=running" | grep -q "promtail"; then
-              echo "promtail is running"
-            else
-              echo "promtail is not running"
-              exit 1
-            fi
-
-  deploy-on-the-production-backend:
-    if: github.event.inputs.host == 'production-backend'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Copy promtail configuration
-        uses: appleboy/scp-action@v0.1.3
-        with:
-          host: ${{ secrets.VPS_HOST_PROD_BACK }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ secrets.VPS_USERNAME_PROD_BACK }}
-          key: ${{ secrets.VPS_SSH_KEY_PROD_BACK }}
-          source: "./promtail-config.production-backend.yml"
-          target: "/home/${{ secrets.VPS_USERNAME_PROD_BACK }}/promtail/"
-
-      - name: Deploy and verify promtail
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST_PROD_BACK }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ secrets.VPS_USERNAME_PROD_BACK }}
-          key: ${{ secrets.VPS_SSH_KEY_PROD_BACK }}
-          script: |
-            docker stop promtail || true
-            docker rm promtail || true
-            docker pull grafana/promtail:latest
-            docker run -d --restart=unless-stopped --name promtail --volume /home/${{ secrets.VPS_USERNAME_PROD_BACK }}/promtail/promtail-config.production-backend.yml:/etc/promtail/config.yml \
-                --volume /var/run/docker.sock:/var/run/docker.sock grafana/promtail:latest \
-                -config.file=/etc/promtail/config.yml
-
-            sleep 10
-            if docker ps --filter "name=promtail" --filter "status=running" | grep -q "promtail"; then
-              echo "promtail is running"
-            else
-              echo "promtail is not running"
-              exit 1
-            fi
-
-  deploy-on-the-production-infra:
-    if: github.event.inputs.host == 'production-infra'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Copy promtail configuration
-        uses: appleboy/scp-action@v0.1.3
-        with:
-          host: ${{ secrets.VPS_HOST_PROD_INFRA }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ secrets.VPS_USERNAME_PROD_INFRA }}
-          key: ${{ secrets.VPS_SSH_KEY_INFRA }}
-          source: "./promtail-config.production-infra.yml"
-          target: "/home/${{ secrets.VPS_USERNAME_PROD_INFRA }}/promtail/"
-
-      - name: Deploy and verify promtail
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST_PROD_INFRA }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ secrets.VPS_USERNAME_PROD_INFRA }}
-          key: ${{ secrets.VPS_SSH_KEY_INFRA }}
-          script: |
-            docker stop promtail || true
-            docker rm promtail || true
-            docker pull grafana/promtail:latest
-            docker run -d --name promtail --volume /home/${{ secrets.VPS_USERNAME_PROD_INFRA }}/promtail/promtail-config.production-infra.yml:/etc/promtail/config.yml \
-                --volume /var/run/docker.sock:/var/run/docker.sock grafana/promtail:latest \
-                -config.file=/etc/promtail/config.yml
-
-            sleep 10
-            if docker ps --filter "name=promtail" --filter "status=running" | grep -q "promtail"; then
-              echo "promtail is running"
-            else
-              echo "promtail is not running"
-              exit 1
-            fi
+            docker rm promtail || tr

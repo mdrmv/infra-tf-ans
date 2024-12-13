@@ -1,33 +1,50 @@
 name: Deploy Node_exporter Production
 
 on:
-    workflow_dispatch:
-      inputs:
-        host:
-          description: 'Host to deploy'
-          required: true
-          default: 'production-infra'
-          type: choice
-          options:
-            - production-frontend
-            - production-backend
-            - production-infra
+  workflow_dispatch:
+    inputs:
+      host:
+        description: 'Host to deploy'
+        required: true
+        default: 'production-infra'
+        type: choice
+        options:
+          - production-frontend
+          - production-backend
+          - production-infra
 
 jobs:
-  deploy-on-the-production-hosts:
-    if: github.event.inputs.host == 'production-frontend' || github.event.inputs.host == 'production-backend' || github.event.inputs.host == 'production-infra'
+  deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Set deployment variables
+        id: vars
+        run: |
+          if [[ "${{ github.event.inputs.host }}" == "production-frontend" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST_FRONT }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME_FRONT }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY_FRONT }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.host }}" == "production-backend" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST_BACK }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME_BACK }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY_BACK }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.host }}" == "production-infra" ]]; then
+            echo "VPS_HOST=${{ secrets.VPS_HOST_INFRA }}" >> $GITHUB_ENV
+            echo "VPS_USERNAME=${{ secrets.VPS_USERNAME_INFRA }}" >> $GITHUB_ENV
+            echo "VPS_SSH_KEY=${{ secrets.VPS_SSH_KEY_INFRA }}" >> $GITHUB_ENV
+          fi
+          echo "VPS_PORT=${{ secrets.VPS_SSH_PORT_PROD }}" >> $GITHUB_ENV
+
       - name: Checkout code
         uses: actions/checkout@v4
-          
-      - name: Deploy and verify node_exporter
+
+      - name: Deploy Node_exporter
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ github.event.inputs.host == 'production-frontend' && secrets.VPS_HOST_FRONT || github.event.inputs.host == 'production-backend' && secrets.VPS_HOST_BACK || secrets.VPS_HOST_INFRA }}
-          port: ${{ secrets.VPS_SSH_PORT_PROD }}
-          username: ${{ github.event.inputs.host == 'production-frontend' && secrets.VPS_USERNAME_FRONT || github.event.inputs.host == 'production-backend' && secrets.VPS_USERNAME_BACK || secrets.VPS_USERNAME_INFRA }}
-          key: ${{ github.event.inputs.host == 'production-frontend' && secrets.VPS_SSH_KEY_FRONT || github.event.inputs.host == 'production-backend' && secrets.VPS_SSH_KEY_BACK || secrets.VPS_SSH_KEY_INFRA }}
+          host: ${{ env.VPS_HOST }}
+          port: ${{ env.VPS_PORT }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ env.VPS_SSH_KEY }}
           script: |
             docker stop node_exporter || true
             docker rm node_exporter || true
@@ -36,12 +53,31 @@ jobs:
               -v "/:/host:ro,rslave" \
               --name node_exporter \
               prom/node-exporter --path.rootfs=/host \
-              --no-collector.arp              
+              --no-collector.arp
 
-            sleep 10
-            if docker ps --filter "name=node_exporter" --filter "status=running" | grep -q "node_exporter"; then
-              echo "node_exporter is running"
-            else
-              echo "node_exporter is not running"
-              exit 1
-            fi
+      - name: Verify Node_exporter
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.VPS_HOST }}
+          port: ${{ env.VPS_PORT }}
+          username: ${{ env.VPS_USERNAME }}
+          key: ${{ env.VPS_SSH_KEY }}
+          script: |
+            retries=5
+            delay_seconds=10
+
+            for attempt in $(seq "$retries"); do
+              if docker ps --filter "name=node_exporter" --filter "status=running" | grep -q "node_exporter"; then
+                echo "Node_exporter is running"
+                exit 0
+              else
+                echo "Healthcheck failed (attempt $attempt/$retries)"
+              fi
+
+              if [ "$attempt" -lt "$retries" ]; then
+                sleep "$delay_seconds"
+              fi
+            done
+
+            echo "Node_exporter failed healthcheck after $retries attempts."
+            exit 1
