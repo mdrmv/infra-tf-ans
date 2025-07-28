@@ -5,7 +5,7 @@ on:
     - cron: '0 3 * * *'  # Launches everyday at 3am UTC
 
 jobs:
-  backup-internal:
+  backup-internal-finance:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -45,7 +45,7 @@ jobs:
           script: |
             find /mnt/io-db-backups/internal-db/ -type f -name '*.sql' -mtime +336 -exec rm {} \;
 
-  backup-stage:
+  backup-stage-finance:
     runs-on: ubuntu-latest
     steps:
       - name: Run backup script via SSH for stage DB
@@ -81,3 +81,117 @@ jobs:
           key: ${{ secrets.BCKPSVPS_SSH_KEY }}
           script: |
             find /mnt/io-db-backups/stage-db/ -type f -name '*.sql' -mtime +336 -exec rm {} \;
+
+  backup-internal-global:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run backup script via SSH for internal DB
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.BCKPSVPS_HOST }}
+          port: ${{ secrets.BCKPSVPS_SSH_PORT }}
+          username: ${{ secrets.BCKPSVPS_USERNAME }}
+          key: ${{ secrets.BCKPSVPS_SSH_KEY }}
+          script: |
+            DATABASES=("defaultdb" "admin-ms" "client-ms" "notification-ms" "user-ms")
+            BACKUP_PATH="/mnt/io-db-backups/internal-global-db/"
+            
+            for DB in "${DATABASES[@]}"
+            do
+              echo "Starting backup for $DB"
+              PGPASSWORD="${{ secrets.DB_PASSWORD_INTERNAL_GLOBAL }}" pg_dump -U ${{ secrets.DB_USER_INTERNAL_GLOBAL }} -h ${{ secrets.DB_HOST_INTERNAL_GLOBAL }} -p ${{ secrets.DB_PORT_INTERNAL_GLOBAL }} $DB > "${BACKUP_PATH}/${DB}_backup_$(date +%Y-%m-%d).sql"
+              
+              if [ $? -eq 0 ]; then
+                echo "Backup successful for $DB"
+              else
+                echo "Backup failed for $DB"
+                exit 1
+              fi
+            done
+
+      - name: Cleanup old backups in internal DB folder
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.BCKPSVPS_HOST }}
+          port: ${{ secrets.BCKPSVPS_SSH_PORT }}
+          username: ${{ secrets.BCKPSVPS_USERNAME }}
+          key: ${{ secrets.BCKPSVPS_SSH_KEY }}
+          script: |
+            find /mnt/io-db-backups/internal-global-db/ -type f -name '*.sql' -mtime +336 -exec rm {} \;
+
+  backup-stage-global:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run backup script via SSH for stage DB
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.BCKPSVPS_HOST }}
+          port: ${{ secrets.BCKPSVPS_SSH_PORT }}
+          username: ${{ secrets.BCKPSVPS_USERNAME }}
+          key: ${{ secrets.BCKPSVPS_SSH_KEY }}
+          script: |
+            DATABASES=("defaultdb" "admin-ms" "client-ms" "notification-ms" "user-ms")
+            BACKUP_PATH="/mnt/io-db-backups/stage-global-db/"
+            
+            for DB in "${DATABASES[@]}"
+            do
+              echo "Starting backup for $DB"
+              PGPASSWORD="${{ secrets.DB_PASSWORD_STAGE_GLOBAL }}" pg_dump -U ${{ secrets.DB_USER_STAGE_GLOBAL }} -h ${{ secrets.DB_HOST_STAGE_GLOBAL }} -p ${{ secrets.DB_PORT_STAGE_GLOBAL }} $DB > "${BACKUP_PATH}/${DB}_backup_$(date +%Y-%m-%d).sql"
+              
+              if [ $? -eq 0 ]; then
+                echo "Backup successful for $DB"
+              else
+                echo "Backup failed for $DB"
+                exit 1
+              fi
+            done
+
+      - name: Cleanup old backups in stage DB folder
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.BCKPSVPS_HOST }}
+          port: ${{ secrets.BCKPSVPS_SSH_PORT }}
+          username: ${{ secrets.BCKPSVPS_USERNAME }}
+          key: ${{ secrets.BCKPSVPS_SSH_KEY }}
+          script: |
+            find /mnt/io-db-backups/stage-global-db/ -type f -name '*.sql' -mtime +336 -exec rm {} \;
+
+  backup-production-finance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run backup script via SSH for stage DB
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.BCKPSVPS_HOST }}
+          port: ${{ secrets.BCKPSVPS_SSH_PORT }}
+          username: ${{ secrets.BCKPSVPS_USERNAME }}
+          key: ${{ secrets.BCKPSVPS_SSH_KEY }}
+          script: |
+            DATABASES=("defaultdb" "admin-ms" "client-ms" "notification-ms" "user-ms")
+            BACKUP_PATH="/mnt/io-db-backups/prod-finance-db/"
+            
+            for DB in "${DATABASES[@]}"
+            do
+              echo "Starting backup for $DB"
+              PGPASSWORD="${{ secrets.DB_PASSWORD_PROD_FINANCE }}" pg_dump -U ${{ secrets.DB_USER_PROD_FINANCE }} -h ${{ secrets.DB_HOST_PROD_FINANCE }} -p ${{ secrets.DB_PORT_PROD_FINANCE }} $DB > "${BACKUP_PATH}/${DB}_backup_$(date +%Y-%m-%d).sql"
+              
+              if [ $? -eq 0 ]; then
+                echo "Backup successful for $DB"
+              else
+                echo "Backup failed for $DB"
+                exit 1
+              fi
+            done
+
+      - name: Cleanup old backups in stage DB folder
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.BCKPSVPS_HOST }}
+          port: ${{ secrets.BCKPSVPS_SSH_PORT }}
+          username: ${{ secrets.BCKPSVPS_USERNAME }}
+          key: ${{ secrets.BCKPSVPS_SSH_KEY }}
+          script: |
+            find /mnt/io-db-backups/prod-finance-db/ -type f -name '*.sql' -mtime +336 -exec rm {} \;
