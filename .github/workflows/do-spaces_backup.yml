@@ -5,8 +5,51 @@ on:
     - cron: '0 2 * * *' # Launches everyday at 2am UTC
 
 jobs:
-  deploy:
+  backup-production-spaces:
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Backup DigitalOcean Spaces region ams3 to Local Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.BCKPSVPS_HOST }}
+          port: ${{ secrets.BCKPSVPS_SSH_PORT }}
+          username: ${{ secrets.BCKPSVPS_USERNAME }}
+          key: ${{ secrets.BCKPSVPS_SSH_KEY }}
+          script: |
+            # It is assumed that s3cmd is installed on the VPS (sudo apt-get update, sudo apt-get install)
+            # s3cmd configuration using environment variables
+            cat <<EOF > ~/.s3cfg
+            [default]
+            access_key = ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+            secret_key = ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+            host_base = ams3.digitaloceanspaces.com
+            host_bucket = %(bucket)s.ams3.digitaloceanspaces.com
+            signature_v2 = False
+            use_https = True
+            EOF
+
+            # Environment variables for buckets ("ngdem-production-private" "ngdem-global-production-private")
+            BUCKETS=(
+              "ngdem-production-private"
+              "ngdem-global-production-private"
+            )
+
+            for BUCKET in "${BUCKETS[@]}"; do
+              if s3cmd ls s3://$BUCKET &> /dev/null; then
+                echo "Syncing $BUCKET..."
+                s3cmd sync s3://$BUCKET/ /mnt/io-db-backups/s3/$BUCKET/
+              else
+                echo "Bucket $BUCKET does not exist."
+              fi
+            done
+
+  backup-internal-stage-spaces:
+    runs-on: ubuntu-latest
+    needs: backup-production-spaces
 
     steps:
       - name: Checkout repository
@@ -32,8 +75,11 @@ jobs:
             use_https = True
             EOF
 
-            # Environment variables for buckets ("ngdem-private-internal" "ngdem-private-stage")
-            BUCKETS=("ngdem-private-stage")
+            # Environment variables for buckets ("ngdem-private-internal" "ngdem-private-stage" "ngdem-global-internal-private" "ngdem-global-stage-private")
+            BUCKETS=(
+              "ngdem-private-stage"
+              "ngdem-global-stage-private"
+            )
 
             for BUCKET in "${BUCKETS[@]}"; do
               if s3cmd ls s3://$BUCKET &> /dev/null; then
