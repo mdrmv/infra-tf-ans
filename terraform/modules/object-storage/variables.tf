@@ -60,7 +60,7 @@ variable "default_storage_class" {
 variable "versioning_enabled" {
   description = "Enable bucket versioning."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "bucket_max_size_bytes" {
