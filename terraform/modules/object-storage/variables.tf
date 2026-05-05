@@ -69,7 +69,7 @@ variable "bucket_max_size_bytes" {
   default     = null
 
   validation {
-    condition     = var.bucket_max_size_bytes == null || var.bucket_max_size_bytes > 0
+    condition     = var.bucket_max_size_bytes == null ? true : var.bucket_max_size_bytes > 0
     error_message = "bucket_max_size_bytes must be null or greater than zero."
   }
 }
