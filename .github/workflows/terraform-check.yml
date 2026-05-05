@@ -1,0 +1,32 @@
+name: Terraform Check
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-check.yml"
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive terraform
+
+      - name: Terraform validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for env_dir in terraform/envs/*; do
+            [ -d "${env_dir}" ] || continue
+            terraform -chdir="${env_dir}" init -backend=false
+            terraform -chdir="${env_dir}" validate
+          done
