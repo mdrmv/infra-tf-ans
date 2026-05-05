@@ -1,0 +1,32 @@
+.DS_Store
+
+# Local environment files
+.env
+*.local
+
+# Terraform local state and runtime data
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Keep examples in Git, keep real values out of Git.
+*.tfvars
+!*.tfvars.example
+backend.hcl
+
+# Local credentials
+*.pem
+*.key
+sa-*.json
+*service-account*.json
+
+# Ansible runtime files
+*.retry

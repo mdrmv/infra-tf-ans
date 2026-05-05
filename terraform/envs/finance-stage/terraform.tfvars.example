@@ -1,0 +1,13 @@
+cloud_id  = "replace-with-yc-cloud-id"
+folder_id = "replace-with-finance-stage-folder-id"
+
+service_account_key_file = "~/.config/yandex-cloud/sa-terraform-infra-key.json"
+
+# Optional. Null means no explicit Object Storage size limit.
+bucket_max_size_bytes = null
+
+# Optional. Keep true unless there is a clear cost or application reason to disable it.
+versioning_enabled = true
+
+# Optional. Enable only when frontend/API clients require browser CORS.
+public_cors_rules = []

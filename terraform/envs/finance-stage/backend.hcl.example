@@ -1,0 +1,15 @@
+bucket = "ngdem-terraform-state-kz"
+key    = "finance-stage/terraform.tfstate"
+region = "kz1"
+
+endpoint = "https://storage.yandexcloud.kz"
+
+skip_region_validation      = true
+skip_credentials_validation = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
+
+# Provide backend credentials through environment variables on the control node:
+# export AWS_ACCESS_KEY_ID="..."
+# export AWS_SECRET_ACCESS_KEY="..."
