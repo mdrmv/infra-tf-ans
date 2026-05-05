@@ -20,6 +20,12 @@ variable "yandex_api_endpoint" {
   default     = "api.yandexcloud.kz:443"
 }
 
+variable "yandex_storage_endpoint" {
+  description = "Yandex Cloud KZ Object Storage endpoint used by the provider S3 API."
+  type        = string
+  default     = "https://storage.yandexcloud.kz"
+}
+
 variable "service_account_key_file" {
   description = "Local path to Terraform service account JSON key."
   type        = string

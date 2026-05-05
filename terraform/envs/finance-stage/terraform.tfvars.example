@@ -3,6 +3,9 @@ folder_id = "replace-with-finance-stage-folder-id"
 
 service_account_key_file = "~/.config/yandex-cloud/sa-terraform-infra-key.json"
 
+yandex_api_endpoint     = "api.yandexcloud.kz:443"
+yandex_storage_endpoint = "https://storage.yandexcloud.kz"
+
 # Optional. Null means no explicit Object Storage size limit.
 bucket_max_size_bytes = null
 
