@@ -35,7 +35,7 @@ variable "bucket_max_size_bytes" {
 variable "versioning_enabled" {
   description = "Enable versioning on both buckets."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "public_cors_rules" {

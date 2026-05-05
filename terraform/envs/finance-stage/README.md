@@ -7,6 +7,8 @@ This environment currently creates only the Object Storage pilot resources:
 - `sa-finance-stage-s3`
 - `finance-stage-s3-credentials` in Lockbox
 
+Bucket versioning is disabled by default for the first pilot apply. Enabling it requires provider-level Object Storage static keys with enough permissions for S3 versioning operations.
+
 ## Prepare Local Files
 
 Create local files from examples:

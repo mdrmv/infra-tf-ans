@@ -29,8 +29,12 @@ resource "yandex_storage_bucket" "private" {
     config_read = false
   }
 
-  versioning {
-    enabled = var.versioning_enabled
+  dynamic "versioning" {
+    for_each = var.versioning_enabled ? [true] : []
+
+    content {
+      enabled = true
+    }
   }
 
   dynamic "cors_rule" {
@@ -60,8 +64,12 @@ resource "yandex_storage_bucket" "public" {
     config_read = false
   }
 
-  versioning {
-    enabled = var.versioning_enabled
+  dynamic "versioning" {
+    for_each = var.versioning_enabled ? [true] : []
+
+    content {
+      enabled = true
+    }
   }
 
   dynamic "cors_rule" {
